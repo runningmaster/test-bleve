@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -25,14 +26,15 @@ import (
 // $ curl -i -X POST -T /path/to/data.csv http://localhost:8080/test/upload-suggestion
 // $ curl -i -d '{"name": "foo bar"}' http://localhost:8080/test/select-suggestion
 
-const defaultAddr = "http://localhost:8080"
-
 var indexDB = &index{
 	store: make(map[string]bleve.Index, 4),
 }
 
 func main() {
-	err := startServer(defaultAddr, setupHandler(http.DefaultServeMux))
+	addr := flag.String("addr", "http://localhost:8080", "uri")
+	flag.Parse()
+
+	err := startServer(*addr, setupHandler(http.DefaultServeMux))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -211,6 +213,9 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if v.Limit == 0 {
+		v.Limit = 10
+	}
 
 	idxATC := "atc-ru"
 	idxINF := "inf-ru"
@@ -246,7 +251,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 
 	convName := convString(v.Name, "en", "ru")
 	if langUA(r.Header) {
-		convName = convString(v.Name, "en", "ua")
+		convName = convString(v.Name, "en", "uk")
 	}
 	if len(mATC) == 0 {
 		mATC, err = findByName(idxATC, convName, v.Limit)
@@ -305,7 +310,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	c.SortStrings(sINN)
 	c.SortStrings(sORG)
 
-	res := result{Find: v.Name}
+	res := result{Find: v.Name, Limit: v.Limit}
 	for i := range sATC {
 		s := sugg{Name: sATC[i]}
 		// fucking workaround
@@ -319,7 +324,11 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	for i := range sINF {
 		s := sugg{Name: sINF[i]}
 		s.Keys = append(s.Keys, mINF[s.Name]...)
-		res.SuggINF = append(res.SuggINF, s)
+		if strings.HasPrefix(strings.ToLower(s.Name), strings.ToLower(convName)) {
+			res.SuggINF1 = append(res.SuggINF1, s)
+		} else {
+			res.SuggINF2 = append(res.SuggINF2, s)
+		}
 	}
 	for i := range sINN {
 		s := sugg{Name: sINN[i]}
@@ -344,12 +353,13 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 }
 
 type result struct {
-	Find    string `json:"find,omitempty"`
-	Limit   int    `json:"limit,omitempty"`
-	SuggATC []sugg `json:"sugg_atc,omitempty"`
-	SuggINF []sugg `json:"sugg_inf,omitempty"`
-	SuggINN []sugg `json:"sugg_inn,omitempty"`
-	SuggORG []sugg `json:"sugg_org,omitempty"`
+	Find     string `json:"find,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+	SuggATC  []sugg `json:"sugg_atc,omitempty"`
+	SuggINF1 []sugg `json:"sugg_inf1,omitempty"`
+	SuggINF2 []sugg `json:"sugg_inf2,omitempty"`
+	SuggINN  []sugg `json:"sugg_inn,omitempty"`
+	SuggORG  []sugg `json:"sugg_org,omitempty"`
 }
 
 type sugg struct {
@@ -440,9 +450,9 @@ func (i *index) setIndex(key string, idx bleve.Index) error {
 }
 
 var mapKB = map[string][]rune{
-	"en": []rune("f,dult`;pbqrkvyjghcnea[wxio]ms'.zF<DULT~:PBQRKVYJGHCNEA{WXIO}MS'>Z\\@#$^&|/?"),
-	"ru": []rune("абвгдеёжзийклмнопрстуфхцчшщъьыэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЬЫЭЮЯ\\\"№;:?/.,"),
-	"ua": []rune("абвгдеёжзийклмнопрстуфхцчшщъьыэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЬЫЭЮЯ\\\"№;:?/.,"),
+	"en": []rune("qwertyuiop[]\\asdfghjkl;'zxcvbnm,./`QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?~!@#$%^&*()_+"),
+	"ru": []rune("йцукенгшщзхъ\\фывапролджэячсмитьбю.ёЙЦУКЕНГШЩЗХЪ/ФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,Ё!\"№;%:?*()_+"),
+	"uk": []rune("йцукенгшщзхї\\фівапролджєячсмитьбю.'ЙЦУКЕНГШЩЗХЇ/ФІВАПРОЛДЖЄЯЧСМИТЬБЮ,₴!\"№;%:?*()_+"),
 }
 
 func convString(s, from, to string) string {
