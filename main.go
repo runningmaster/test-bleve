@@ -84,11 +84,11 @@ func uploadSuggestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b, err := ioutil.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = r.Body.Close()
 
 	rec, err := csv.NewReader(bytes.NewReader(b)).ReadAll()
 	if err != nil {
@@ -186,11 +186,11 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b, err := ioutil.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = r.Body.Close()
 
 	v := struct {
 		Name  string `json:"name"`
