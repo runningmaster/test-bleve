@@ -22,6 +22,9 @@ import (
 	"golang.org/x/text/language"
 )
 
+// $ curl -i -X POST -T /path/to/data.csv http://localhost:8080/test/upload-suggestion
+// $ curl -i -d '{"name": "foo bar"}' http://localhost:8080/test/select-suggestion
+
 const defaultAddr = "http://localhost:8080"
 
 var indexDB = &index{
@@ -436,110 +439,29 @@ func (i *index) setIndex(key string, idx bleve.Index) error {
 	return nil
 }
 
+var mapKB = map[string][]rune{
+	"en": []rune("f,dult`;pbqrkvyjghcnea[wxio]ms'.zF<DULT~:PBQRKVYJGHCNEA{WXIO}MS'>Z\\@#$^&|/?"),
+	"ru": []rune("абвгдеёжзийклмнопрстуфхцчшщъьыэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЬЫЭЮЯ\\\"№;:?/.,"),
+	"ua": []rune("абвгдеёжзийклмнопрстуфхцчшщъьыэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЬЫЭЮЯ\\\"№;:?/.,"),
+}
+
 func convString(s, from, to string) string {
-	return s
+	lang1 := mapKB[from]
+	lang2 := mapKB[to]
+	if lang1 == nil || lang2 == nil {
+		return s
+	}
+
+	src := []rune(s)
+	res := make([]rune, len(src))
+	for i := range src {
+		for j := range lang1 {
+			if lang1[j] == src[i] {
+				res[i] = lang2[j]
+				break
+			}
+			res[i] = src[i]
+		}
+	}
+	return string(res)
 }
-
-// $ curl -i -X POST -T ~/Downloads/SearchDataInit.csv http://localhost:8080/test/upload-suggestion
-// $ curl -i -d '{"name": "рисперидон"}' http://localhost:8080/test/select-suggestion
-
-/*
-// copyright http://typing.su (sovtime.ru)
-
-var langSymbols = {
-    ru: 'йцукенгшщзхъ\\фывапролджэячсмитьбю.ёЙЦУКЕНГШЩЗХЪ/ФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,Ё!"№;%:?*()_+',
-    en: 'qwertyuiop[]\\asdfghjkl;\'zxcvbnm,./`QWERTYUIOP{}|ASDFGHJKL:"ZXCVBNM<>?~!@#$%^&*()_+',
-    uk: 'йцукенгшщзхї\\фівапролджєячсмитьбю.\'ЙЦУКЕНГШЩЗХЇ/ФІВАПРОЛДЖЄЯЧСМИТЬБЮ,₴!"№;%:?*()_+',
-    be: 'йцукенгшўзх\'\\фывапролджэячсмітьбю.ёЙЦУКЕНГШЎЗХ\'/ФЫВАПРОЛДЖЭЯЧСМІТЬБЮ,Ё!"№;%:?*()_+',
-    uz: 'йцукенгшўзхъ\\фқвапролджэячсмитьбю.ёЙЦУКЕНГШЎЗХЪ/ФҚВАПРОЛДЖЭЯЧСМИТЬБЮ,Ё!"№;%:?*()ҒҲ',
-    kk: 'йцукенгшщзхъ\\фывапролджэячсмитьбю№(ЙЦУКЕНГШЩЗХЪ/ФЫВАПРОЛДЖЭЯЧСМИТЬБЮ?)!ӘІҢҒ;:ҮҰҚӨҺ',
-    // ka: 'ქწერტყუიოპ[]~ასდფგჰჯკლ;\'ზხცვბნმ,./„ ჭ ღთ     {}| შ    ჟ ₾:"ძ ჩ  N <>?“!@#$%^&*()_+',
-    az: 'qüertyuiopöğ\\asdfghjklıəzxcvbnmçş.`QÜERTYUİOPÖĞ/ASDFGHJKLIƏZXCVBNMÇŞ,~!"№;%:?*()_+',
-    lt: 'qwertyuiop[]\\asdfghjkl;\'zxcvbnm,./`QWERTYUIOP{}|ASDFGHJKL:"ZXCVBNM<>?~ĄČĘĖĮŠŲŪ()_Ž',
-    mo: 'qwertyuiopăîâasdfghjklșțzxcvbnm,./„QWERTYUIOPĂÎÂASDFGHJKLȘȚZXCVBNM;:?”!@#$%^&*()_+',
-    lv: 'qwertyuiop[]\\asdfghjkl;\'zxcvbnm,./`QWERTYUIOP{}|ASDFGHJKL:"ZXCVBNM<>?~!@#$%^&*()_+',//en
-    ky: 'йцукенгшщзхъ\\фывапролджэячсмитьбю.ёЙЦУКЕНГШЩЗХЪ/ФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,Ё!"№;%:?*()_+',
-    tg: 'йқукенгшҳзхъ\\фҷвапролджэячсмитӣбю.ёЙҚУКЕНГШҲЗХЪ/ФҶВАПРОЛДЖЭЯЧСМИТӢБЮ,Ё!"№;%:?*()ҒӮ',
-    hy: 'քոեռտըւիօպխծշասդֆգհյկլ;՛զղցվբնմ,․/՝ՔՈԵՌՏԸՒԻՕՊԽԾՇԱՍԴՖԳՀՅԿԼ։"ԶՂՑՎԲՆՄ<>՞՜ԷԹՓՁՋՒևՐՉՃ—Ժ',
-    tk: 'äwertyuiopňöşasdfghjkl;\'züçýbnm,./žÄWERTYUIOPŇÖŞASDFGHJKL:"ZÜÇÝBNM<>?Ž!@#$%№&*()_+',
-    et: 'qwertyuiopüõ\'asdfghjklöäzxcvbnm,.-ˇQWERTYUIOPÜÕ*ASDFGHJKLÖÄZXCVBNM;:_~!"#¤%&/()=?`'
-};
-var fromLang = '',
-    toLang = '';
-
-function convert(text, lang1, lang2) {
-    var resultText = '';
-
-    if (lang1 === 'auto') {
-        if (langSymbols[lang2].indexOf(text.charAt(1)) === -1) {
-            fromLang = langSymbols.en;
-            toLang = langSymbols[lang2];
-            // console.log('en', lang2);
-        } else {
-            fromLang = langSymbols[lang2];
-            toLang = langSymbols.en;
-            // console.log(lang2, 'en');
-        }
-
-    } else {
-      fromLang = langSymbols[lang1];
-      toLang = langSymbols[lang2];
-    }
-
-    for (var i = 0; i < text.length; i++) {
-        var j = fromLang.indexOf(text.charAt(i));
-        if (j < 0) {
-            resultText += text.charAt(i);
-        } else {
-            resultText += toLang.charAt(j);
-        }
-    }
-    return resultText;
-}
-
-function output(form) {
-    form.decoded.value = convert(form.coded.value, form.lang1.value, form.lang2.value);
-}
-function clear(form) {
-    form.decoded.value = '';
-    form.coded.value = '';
-}
-
-function input(form, area, buttonStart, buttonClear, select1, select2) {
-    area.addEventListener('input', function() {
-        output(form);
-    }, false);
-
-    buttonStart.addEventListener('click', function() {
-        output(form);
-    }, false);
-
-    buttonClear.addEventListener('click', function() {
-        clear(form);
-    }, false);
-
-    select1.addEventListener('change', function() {
-        output(form);
-    }, false);
-
-    select2.addEventListener('change', function() {
-        output(form);
-    }, false);
-}
-
-function onLoad() {
-    var form = document.getElementById('convert-form'),
-    area = form.coded,
-    button1 = document.getElementById('start-btn'),
-    button2 = document.getElementById('clear-btn'),
-    select1 = document.getElementById('lang1'),
-    select2 = document.getElementById('lang2');
-
-    input(form, area, button1, button2, select1, select2);
-}
-
-window.onload = function() {
-  onLoad();
-};
-
-*/
