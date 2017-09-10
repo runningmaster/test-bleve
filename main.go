@@ -208,8 +208,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	v := struct {
-		Name  string `json:"name"`
-		Limit int    `json:"limit"`
+		Name string `json:"name"`
 	}{}
 
 	err = json.Unmarshal(b, &v)
@@ -228,9 +227,6 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if v.Limit == 0 {
-		v.Limit = 10
-	}
 
 	idxATC := "atc-ru"
 	idxINF := "inf-ru"
@@ -245,27 +241,27 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		idxORG = "org-ua"
 	}
 
-	mATC, err := findByName(idxATC, v.Name, v.Limit)
+	mATC, err := findByName(idxATC, v.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	mINF, err := findByName(idxINF, v.Name, v.Limit)
+	mINF, err := findByName(idxINF, v.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	mINN, err := findByName(idxINN, v.Name, v.Limit)
+	mINN, err := findByName(idxINN, v.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	mACT, err := findByName(idxACT, v.Name, v.Limit)
+	mACT, err := findByName(idxACT, v.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	mORG, err := findByName(idxORG, v.Name, v.Limit)
+	mORG, err := findByName(idxORG, v.Name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -276,35 +272,35 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		convName = convString(v.Name, "en", "uk")
 	}
 	if len(mATC) == 0 {
-		mATC, err = findByName(idxATC, convName, v.Limit)
+		mATC, err = findByName(idxATC, convName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	if len(mINF) == 0 {
-		mINF, err = findByName(idxINF, convName, v.Limit)
+		mINF, err = findByName(idxINF, convName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	if len(mINN) == 0 {
-		mINN, err = findByName(idxINN, convName, v.Limit)
+		mINN, err = findByName(idxINN, convName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	if len(mACT) == 0 {
-		mACT, err = findByName(idxACT, convName, v.Limit)
+		mACT, err = findByName(idxACT, convName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	if len(mORG) == 0 {
-		mORG, err = findByName(idxORG, convName, v.Limit)
+		mORG, err = findByName(idxORG, convName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -344,7 +340,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	c.SortStrings(sACT)
 	c.SortStrings(sORG)
 
-	res := result{Find: v.Name, Limit: v.Limit}
+	res := result{Find: v.Name}
 	for i := range sATC {
 		s := sugg{Name: sATC[i]}
 		// fucking workaround
@@ -393,7 +389,6 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 
 type result struct {
 	Find     string `json:"find,omitempty"`
-	Limit    int    `json:"limit,omitempty"`
 	SuggATC  []sugg `json:"sugg_atc,omitempty"`
 	SuggINF1 []sugg `json:"sugg_inf1,omitempty"`
 	SuggINF2 []sugg `json:"sugg_inf2,omitempty"`
@@ -412,7 +407,7 @@ func langUA(h http.Header) bool {
 	return strings.Contains(l, "uk") || strings.Contains(l, "ua") // FIXME
 }
 
-func findByName(key, name string, limit int) (map[string][]string, error) {
+func findByName(key, name string) (map[string][]string, error) {
 	idx, err := indexDB.getIndex(key)
 	if err != nil {
 		return nil, err
@@ -427,9 +422,8 @@ func findByName(key, name string, limit int) (map[string][]string, error) {
 
 	qry := bleve.NewConjunctionQuery(cns...)
 	req := bleve.NewSearchRequest(qry)
-	if limit > 0 {
-		req.Size = limit
-	}
+	req.Size = 1000
+
 	res, err := idx.Search(req)
 	if err != nil {
 		return nil, err
