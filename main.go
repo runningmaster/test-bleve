@@ -111,6 +111,11 @@ func uploadSuggestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	idxACTru, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	idxORGru, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -128,6 +133,11 @@ func uploadSuggestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	idxINNua, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	idxACTua, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -158,6 +168,9 @@ func uploadSuggestion(w http.ResponseWriter, r *http.Request) {
 		case "inn":
 			idxINNru.Index(rec[i][1], strings.TrimSpace(rec[i][2]))
 			idxINNua.Index(rec[i][1], strings.TrimSpace(rec[i][3]))
+		case "act":
+			idxACTru.Index(rec[i][1], strings.TrimSpace(rec[i][2]))
+			idxACTua.Index(rec[i][1], strings.TrimSpace(rec[i][3]))
 		case "org":
 			idxORGru.Index(rec[i][1], strings.TrimSpace(rec[i][2]))
 			idxORGua.Index(rec[i][1], strings.TrimSpace(rec[i][3]))
@@ -168,11 +181,13 @@ func uploadSuggestion(w http.ResponseWriter, r *http.Request) {
 	indexDB.setIndex("atc-ru", idxATCru)
 	indexDB.setIndex("inf-ru", idxINFru)
 	indexDB.setIndex("inn-ru", idxINNru)
+	indexDB.setIndex("act-ru", idxACTru)
 	indexDB.setIndex("org-ru", idxORGru)
 
 	indexDB.setIndex("atc-ua", idxATCua)
 	indexDB.setIndex("inf-ua", idxINFua)
 	indexDB.setIndex("inn-ua", idxINNua)
+	indexDB.setIndex("act-ua", idxACTua)
 	indexDB.setIndex("org-ua", idxORGua)
 
 	w.WriteHeader(http.StatusOK)
@@ -220,11 +235,13 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	idxATC := "atc-ru"
 	idxINF := "inf-ru"
 	idxINN := "inn-ru"
+	idxACT := "act-ru"
 	idxORG := "org-ru"
 	if langUA(r.Header) {
 		idxATC = "atc-ua"
 		idxINF = "inf-ua"
 		idxINN = "inn-ua"
+		idxACT = "act-ua"
 		idxORG = "org-ua"
 	}
 
@@ -239,6 +256,11 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mINN, err := findByName(idxINN, v.Name, v.Limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	mACT, err := findByName(idxACT, v.Name, v.Limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -274,6 +296,13 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if len(mACT) == 0 {
+		mACT, err = findByName(idxACT, convName, v.Limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 	if len(mORG) == 0 {
 		mORG, err = findByName(idxORG, convName, v.Limit)
 		if err != nil {
@@ -285,6 +314,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	sATC := make([]string, 0, len(mATC))
 	sINF := make([]string, 0, len(mINF))
 	sINN := make([]string, 0, len(mINN))
+	sACT := make([]string, 0, len(mACT))
 	sORG := make([]string, 0, len(mORG))
 
 	for k := range mATC {
@@ -295,6 +325,9 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	}
 	for k := range mINN {
 		sINN = append(sINN, k)
+	}
+	for k := range mACT {
+		sACT = append(sACT, k)
 	}
 	for k := range mORG {
 		sORG = append(sORG, k)
@@ -308,6 +341,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	c.SortStrings(sATC)
 	c.SortStrings(sINF)
 	c.SortStrings(sINN)
+	c.SortStrings(sACT)
 	c.SortStrings(sORG)
 
 	res := result{Find: v.Name, Limit: v.Limit}
@@ -335,6 +369,11 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		s.Keys = append(s.Keys, mINN[s.Name]...)
 		res.SuggINN = append(res.SuggINN, s)
 	}
+	for i := range sACT {
+		s := sugg{Name: sACT[i]}
+		s.Keys = append(s.Keys, mACT[s.Name]...)
+		res.SuggACT = append(res.SuggACT, s)
+	}
 	for i := range sORG {
 		s := sugg{Name: sORG[i]}
 		s.Keys = append(s.Keys, mORG[s.Name]...)
@@ -359,6 +398,7 @@ type result struct {
 	SuggINF1 []sugg `json:"sugg_inf1,omitempty"`
 	SuggINF2 []sugg `json:"sugg_inf2,omitempty"`
 	SuggINN  []sugg `json:"sugg_inn,omitempty"`
+	SuggACT  []sugg `json:"sugg_act,omitempty"`
 	SuggORG  []sugg `json:"sugg_org,omitempty"`
 }
 
