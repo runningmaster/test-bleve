@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ import (
 var indexDB = &index{
 	store: make(map[string]bleve.Index, 10),
 	vault: make(map[string]*sync.Map, 10),
+	sales: make(map[int]int, 10000),
 }
 
 func main() {
@@ -44,9 +46,10 @@ func main() {
 
 func setupHandler(m *http.ServeMux) http.Handler {
 	m.HandleFunc("/test/upload-sugg", uploadSugg)
+	m.HandleFunc("/test/upload-sugg2", uploadSugg2)
 	m.HandleFunc("/test/select-suggestion", selectSuggestion)
 	m.HandleFunc("/test/select-sugg", selectSugg)
-	m.HandleFunc("/test/select-name", selectName)
+	m.HandleFunc("/test/select-name", selectSuggestion2)
 	return m
 }
 
@@ -172,6 +175,9 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := range rec {
+		if i == 0 {
+			continue
+		}
 		if len(rec[i]) < 6 {
 			err = fmt.Errorf("invalid csv: got %d, want %d", len(rec[i]), 6)
 		}
@@ -273,7 +279,49 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 	indexDB.setVault("org-ua", vltORGua)
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, len(rec))
+	fmt.Fprintln(w, len(rec)-1)
+}
+
+func uploadSugg2(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	b, err := ioutil.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rec, err := csv.NewReader(bytes.NewReader(b)).ReadAll()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for i := range rec {
+		if i == 0 {
+			continue
+		}
+		if len(rec[i]) < 2 {
+			err = fmt.Errorf("invalid csv: got %d, want %d", len(rec[i]), 2)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		key, _ := strconv.Atoi(rec[i][0])
+		val, _ := strconv.Atoi(rec[i][1])
+
+		indexDB.sales[key] = val
+
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, len(rec)-1, len(indexDB.sales))
 }
 
 func selectSuggestion(w http.ResponseWriter, r *http.Request) {
@@ -470,6 +518,261 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, string(b))
 }
 
+func selectSuggestion2(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	b, err := ioutil.ReadAll(r.Body)
+	defer func() { _ = r.Body.Close() }()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	v := struct {
+		Name string `json:"name"`
+	}{}
+
+	err = json.Unmarshal(b, &v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	n := len([]rune(v.Name))
+	if n <= 2 {
+		err = fmt.Errorf("too few characters: %d", n)
+	} else if n > 128 {
+		err = fmt.Errorf("too many characters: %d", n)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	idxATC := "atc-ru"
+	idxINF := "inf-ru"
+	idxINN := "inn-ru"
+	idxACT := "act-ru"
+	idxORG := "org-ru"
+	if langUA(r.Header) {
+		idxATC = "atc-ua"
+		idxINF = "inf-ua"
+		idxINN = "inn-ua"
+		idxACT = "act-ua"
+		idxORG = "org-ua"
+	}
+
+	mATC, err := matchByName(idxATC, v.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	mINF, err := matchByName(idxINF, v.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	mINN, err := matchByName(idxINN, v.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	mACT, err := matchByName(idxACT, v.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	mORG, err := matchByName(idxORG, v.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	convName := convString(v.Name, "en", "ru")
+	if langUA(r.Header) {
+		convName = convString(v.Name, "en", "uk")
+	}
+	if len(mATC) == 0 {
+		mATC, err = matchByName(idxATC, convName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if len(mINF) == 0 {
+		mINF, err = matchByName(idxINF, convName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if len(mINN) == 0 {
+		mINN, err = matchByName(idxINN, convName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if len(mACT) == 0 {
+		mACT, err = matchByName(idxACT, convName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if len(mORG) == 0 {
+		mORG, err = matchByName(idxORG, convName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	sATC := make([]string, 0, len(mATC))
+	sINF := make([]string, 0, len(mINF))
+	sINN := make([]string, 0, len(mINN))
+	sACT := make([]string, 0, len(mACT))
+	sORG := make([]string, 0, len(mORG))
+
+	for k := range mATC {
+		sATC = append(sATC, k)
+	}
+	for k := range mINF {
+		sINF = append(sINF, k)
+	}
+	for k := range mINN {
+		sINN = append(sINN, k)
+	}
+	for k := range mACT {
+		sACT = append(sACT, k)
+	}
+	for k := range mORG {
+		sORG = append(sORG, k)
+	}
+
+	// Sorting
+	c := collate.New(language.Russian)
+	if langUA(r.Header) {
+		c = collate.New(language.Ukrainian)
+	}
+	c.SortStrings(sATC)
+	c.SortStrings(sINF)
+	c.SortStrings(sINN)
+	c.SortStrings(sACT)
+	c.SortStrings(sORG)
+
+	res := result{Find: v.Name}
+	for i := range sATC {
+		s := sugg{Name: sATC[i]}
+		// fucking workaround
+		keys := mATC[s.Name]
+		for i := range keys {
+			keys[i] = strings.Split(keys[i], "|")[0]
+		}
+		s.Keys = append(s.Keys, keys...)
+		s.Name = strings.TrimSpace(strings.Replace(s.Name, "|", " ", 1))
+		res.SuggATC = append(res.SuggATC, s)
+	}
+	for i := range sINF {
+		s := sugg{Name: sINF[i]}
+		s.Keys = append(s.Keys, mINF[s.Name]...)
+		res.SuggINF = append(res.SuggINF, s)
+	}
+	for i := range sINN {
+		s := sugg{Name: sINN[i]}
+		s.Keys = append(s.Keys, mINN[s.Name]...)
+		res.SuggINN = append(res.SuggINN, s)
+	}
+	for i := range sACT {
+		s := sugg{Name: sACT[i]}
+		s.Keys = append(s.Keys, mACT[s.Name]...)
+		res.SuggACT = append(res.SuggACT, s)
+	}
+	for i := range sORG {
+		s := sugg{Name: sORG[i]}
+		s.Keys = append(s.Keys, mORG[s.Name]...)
+		res.SuggORG = append(res.SuggORG, s)
+	}
+
+	//for i := range res.SuggATC {
+	//	res.SuggATC[i].Keys = sortMagic(idxATC, res.SuggATC[i].Keys...)
+	//}
+	for i := range res.SuggINF {
+		res.SuggINF[i].Keys = sortMagic(idxINF, res.SuggINF[i].Keys...)
+	}
+	for i := range res.SuggINN {
+		res.SuggINN[i].Keys = sortMagic(idxINN, res.SuggINN[i].Keys...)
+	}
+	for i := range res.SuggACT {
+		res.SuggACT[i].Keys = sortMagic(idxACT, res.SuggACT[i].Keys...)
+	}
+	for i := range res.SuggORG {
+		res.SuggORG[i].Keys = sortMagic(idxORG, res.SuggORG[i].Keys...)
+	}
+
+	b, err = json.MarshalIndent(res, "", "\t")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, string(b))
+}
+
+func sortMagic(key string, keys ...string) []string {
+	if len(keys) < 2 {
+		return keys
+	}
+
+	vlt, err := indexDB.getVault(key)
+	if err != nil {
+		return keys
+	}
+
+	tmp := make([]*baseDoc, 0, len(keys))
+	for i := range keys {
+		if v, ok := vlt.Load(keys[i]); ok {
+			d := v.(*baseDoc)
+			d.Sale = indexDB.sales[d.ID]
+			//println(keys[i], d.Info, d.Sale)
+			tmp = append(tmp, d)
+		}
+	}
+
+	if len(tmp) == 0 {
+		return keys
+	}
+
+	sort.Slice(tmp,
+		func(i, j int) bool {
+			if tmp[i].Info > tmp[j].Info {
+				return true
+			} else if tmp[i].Info < tmp[j].Info {
+				return false
+			}
+			if tmp[i].Sale > tmp[j].Sale {
+				return true
+			} else if tmp[i].Sale < tmp[j].Sale {
+				return false
+			}
+			return tmp[i].Name < tmp[j].Name
+		},
+	)
+
+	out := make([]string, len(tmp))
+	for i := range tmp {
+		//	println(tmp[i].ID, tmp[i].Info, tmp[i].Sale)
+		out[i] = strconv.Itoa(tmp[i].ID)
+	}
+
+	return out
+}
+
 func selectSugg(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -634,65 +937,11 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, string(b))
 }
 
-func selectName(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-
-	b, err := ioutil.ReadAll(r.Body)
-	defer func() { _ = r.Body.Close() }()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	v := struct {
-		Name string `json:"name"`
-	}{}
-
-	err = json.Unmarshal(b, &v)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	n := len([]rune(v.Name))
-	if n <= 2 {
-		err = fmt.Errorf("too few characters: %d", n)
-	} else if n > 128 {
-		err = fmt.Errorf("too many characters: %d", n)
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	//idx := "ru"
-	//if langUA(r.Header) {
-	//	idx = "ua"
-	//}
-
-	//convName := convString(v.Name, "en", "ru")
-	//if langUA(r.Header) {
-	//	convName = convString(v.Name, "en", "uk")
-	//}
-
-	b, err = json.MarshalIndent([]byte("{\"name\":\"bar\"}"), "", "\t")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, string(b))
-}
-
 type result struct {
 	Find     string   `json:"find,omitempty"`
 	Sugg     []string `json:"sugg,omitempty"`
 	SuggATC  []sugg   `json:"sugg_atc,omitempty"`
+	SuggINF  []sugg   `json:"sugg_inf,omitempty"`
 	SuggINF1 []sugg   `json:"sugg_inf1,omitempty"`
 	SuggINF2 []sugg   `json:"sugg_inf2,omitempty"`
 	SuggINN  []sugg   `json:"sugg_inn,omitempty"`
@@ -744,10 +993,45 @@ func findByName(key, name string) (map[string][]string, error) {
 	return out, nil
 }
 
+func matchByName(key, name string) (map[string][]string, error) {
+	idx, err := indexDB.getIndex(key)
+	if err != nil {
+		return nil, err
+	}
+
+	qry := bleve.NewMatchQuery(strings.ToLower(name))
+	req := bleve.NewSearchRequest(qry)
+	req.Size = 1000
+
+	res, err := idx.Search(req)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[string][]string, len(res.Hits))
+	for _, v := range res.Hits {
+		doc, err := idx.Document(v.ID)
+		if err != nil {
+			return nil, err
+		}
+		if strings.ToLower(name) == strings.ToLower(string(doc.Fields[0].Value())) {
+			out[string(doc.Fields[0].Value())] = append(out[string(doc.Fields[0].Value())], v.ID)
+		}
+		if strings.HasPrefix(key, "atc-") {
+			if strings.HasSuffix(strings.ToLower(string(doc.Fields[0].Value())), strings.ToLower(name)) {
+				out[string(doc.Fields[0].Value())] = append(out[string(doc.Fields[0].Value())], v.ID)
+			}
+		}
+	}
+
+	return out, nil
+}
+
 type index struct {
 	sync.RWMutex
 	store map[string]bleve.Index
 	vault map[string]*sync.Map
+	sales map[int]int
 }
 
 func (i *index) getIndex(key string) (bleve.Index, error) {
