@@ -49,7 +49,6 @@ func setupHandler(m *http.ServeMux) http.Handler {
 	m.HandleFunc("/test/upload-sugg2", uploadSugg2)
 	m.HandleFunc("/test/select-suggestion", selectSuggestion)
 	m.HandleFunc("/test/select-sugg", selectSugg)
-	m.HandleFunc("/test/select-name", selectSuggestion2)
 	return m
 }
 
@@ -479,12 +478,14 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 			keys[i] = strings.Split(keys[i], "|")[0]
 		}
 		s.Keys = append(s.Keys, keys...)
+		s.Keys = sortMagic(idxINN, mATC[s.Name]...)
 		s.Name = strings.TrimSpace(strings.Replace(s.Name, "|", " ", 1))
 		res.SuggATC = append(res.SuggATC, s)
 	}
 	for i := range sINF {
 		s := sugg{Name: sINF[i]}
 		s.Keys = append(s.Keys, mINF[s.Name]...)
+		s.Keys = sortMagic(idxINF, s.Keys...)
 		if strings.HasPrefix(strings.ToLower(s.Name), strings.ToLower(convName)) {
 			res.SuggINF1 = append(res.SuggINF1, s)
 		} else {
@@ -494,225 +495,42 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	for i := range sINN {
 		s := sugg{Name: sINN[i]}
 		s.Keys = append(s.Keys, mINN[s.Name]...)
+		s.Keys = sortMagic(idxINN, s.Keys...)
 		res.SuggINN = append(res.SuggINN, s)
 	}
 	for i := range sACT {
 		s := sugg{Name: sACT[i]}
 		s.Keys = append(s.Keys, mACT[s.Name]...)
+		s.Keys = sortMagic(idxACT, s.Keys...)
 		res.SuggACT = append(res.SuggACT, s)
 	}
 	for i := range sORG {
 		s := sugg{Name: sORG[i]}
 		s.Keys = append(s.Keys, mORG[s.Name]...)
+		s.Keys = sortMagic(idxORG, s.Keys...)
 		res.SuggORG = append(res.SuggORG, s)
 	}
 
-	b, err = json.MarshalIndent(res, "", "\t")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, string(b))
-}
-
-func selectSuggestion2(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-
-	b, err := ioutil.ReadAll(r.Body)
-	defer func() { _ = r.Body.Close() }()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	v := struct {
-		Name string `json:"name"`
-	}{}
-
-	err = json.Unmarshal(b, &v)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	n := len([]rune(v.Name))
-	if n <= 2 {
-		err = fmt.Errorf("too few characters: %d", n)
-	} else if n > 128 {
-		err = fmt.Errorf("too many characters: %d", n)
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	idxATC := "atc-ru"
-	idxINF := "inf-ru"
-	idxINN := "inn-ru"
-	idxACT := "act-ru"
-	idxORG := "org-ru"
-	if langUA(r.Header) {
-		idxATC = "atc-ua"
-		idxINF = "inf-ua"
-		idxINN = "inn-ua"
-		idxACT = "act-ua"
-		idxORG = "org-ua"
-	}
-
-	mATC, err := matchByName(idxATC, v.Name)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	mINF, err := matchByName(idxINF, v.Name)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	mINN, err := matchByName(idxINN, v.Name)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	mACT, err := matchByName(idxACT, v.Name)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	mORG, err := matchByName(idxORG, v.Name)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	convName := convString(v.Name, "en", "ru")
-	if langUA(r.Header) {
-		convName = convString(v.Name, "en", "uk")
-	}
-	if len(mATC) == 0 {
-		mATC, err = matchByName(idxATC, convName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+	/*
+		for i := range res.SuggATC {
+			res.SuggATC[i].Keys = sortMagic(idxATC, res.SuggATC[i].Keys...)
 		}
-	}
-	if len(mINF) == 0 {
-		mINF, err = matchByName(idxINF, convName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		for i := range res.SuggINF1 {
+			res.SuggINF1[i].Keys = sortMagic(idxINF, res.SuggINF1[i].Keys...)
 		}
-	}
-	if len(mINN) == 0 {
-		mINN, err = matchByName(idxINN, convName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		for i := range res.SuggINF2 {
+			res.SuggINF2[i].Keys = sortMagic(idxINF, res.SuggINF2[i].Keys...)
 		}
-	}
-	if len(mACT) == 0 {
-		mACT, err = matchByName(idxACT, convName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		for i := range res.SuggINN {
+			res.SuggINN[i].Keys = sortMagic(idxINN, res.SuggINN[i].Keys...)
 		}
-	}
-	if len(mORG) == 0 {
-		mORG, err = matchByName(idxORG, convName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		for i := range res.SuggACT {
+			res.SuggACT[i].Keys = sortMagic(idxACT, res.SuggACT[i].Keys...)
 		}
-	}
-
-	sATC := make([]string, 0, len(mATC))
-	sINF := make([]string, 0, len(mINF))
-	sINN := make([]string, 0, len(mINN))
-	sACT := make([]string, 0, len(mACT))
-	sORG := make([]string, 0, len(mORG))
-
-	for k := range mATC {
-		sATC = append(sATC, k)
-	}
-	for k := range mINF {
-		sINF = append(sINF, k)
-	}
-	for k := range mINN {
-		sINN = append(sINN, k)
-	}
-	for k := range mACT {
-		sACT = append(sACT, k)
-	}
-	for k := range mORG {
-		sORG = append(sORG, k)
-	}
-
-	// Sorting
-	c := collate.New(language.Russian)
-	if langUA(r.Header) {
-		c = collate.New(language.Ukrainian)
-	}
-	c.SortStrings(sATC)
-	c.SortStrings(sINF)
-	c.SortStrings(sINN)
-	c.SortStrings(sACT)
-	c.SortStrings(sORG)
-
-	res := result{Find: v.Name}
-	for i := range sATC {
-		s := sugg{Name: sATC[i]}
-		// fucking workaround
-		keys := mATC[s.Name]
-		for i := range keys {
-			keys[i] = strings.Split(keys[i], "|")[0]
+		for i := range res.SuggORG {
+			res.SuggORG[i].Keys = sortMagic(idxORG, res.SuggORG[i].Keys...)
 		}
-		s.Keys = append(s.Keys, keys...)
-		s.Name = strings.TrimSpace(strings.Replace(s.Name, "|", " ", 1))
-		res.SuggATC = append(res.SuggATC, s)
-	}
-	for i := range sINF {
-		s := sugg{Name: sINF[i]}
-		s.Keys = append(s.Keys, mINF[s.Name]...)
-		res.SuggINF = append(res.SuggINF, s)
-	}
-	for i := range sINN {
-		s := sugg{Name: sINN[i]}
-		s.Keys = append(s.Keys, mINN[s.Name]...)
-		res.SuggINN = append(res.SuggINN, s)
-	}
-	for i := range sACT {
-		s := sugg{Name: sACT[i]}
-		s.Keys = append(s.Keys, mACT[s.Name]...)
-		res.SuggACT = append(res.SuggACT, s)
-	}
-	for i := range sORG {
-		s := sugg{Name: sORG[i]}
-		s.Keys = append(s.Keys, mORG[s.Name]...)
-		res.SuggORG = append(res.SuggORG, s)
-	}
-
-	//for i := range res.SuggATC {
-	//	res.SuggATC[i].Keys = sortMagic(idxATC, res.SuggATC[i].Keys...)
-	//}
-	for i := range res.SuggINF {
-		res.SuggINF[i].Keys = sortMagic(idxINF, res.SuggINF[i].Keys...)
-	}
-	for i := range res.SuggINN {
-		res.SuggINN[i].Keys = sortMagic(idxINN, res.SuggINN[i].Keys...)
-	}
-	for i := range res.SuggACT {
-		res.SuggACT[i].Keys = sortMagic(idxACT, res.SuggACT[i].Keys...)
-	}
-	for i := range res.SuggORG {
-		res.SuggORG[i].Keys = sortMagic(idxORG, res.SuggORG[i].Keys...)
-	}
-
+	*/
 	b, err = json.MarshalIndent(res, "", "\t")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -988,40 +806,6 @@ func findByName(key, name string) (map[string][]string, error) {
 			return nil, err
 		}
 		out[string(doc.Fields[0].Value())] = append(out[string(doc.Fields[0].Value())], v.ID)
-	}
-
-	return out, nil
-}
-
-func matchByName(key, name string) (map[string][]string, error) {
-	idx, err := indexDB.getIndex(key)
-	if err != nil {
-		return nil, err
-	}
-
-	qry := bleve.NewMatchQuery(strings.ToLower(name))
-	req := bleve.NewSearchRequest(qry)
-	req.Size = 1000
-
-	res, err := idx.Search(req)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make(map[string][]string, len(res.Hits))
-	for _, v := range res.Hits {
-		doc, err := idx.Document(v.ID)
-		if err != nil {
-			return nil, err
-		}
-		if strings.ToLower(name) == strings.ToLower(string(doc.Fields[0].Value())) {
-			out[string(doc.Fields[0].Value())] = append(out[string(doc.Fields[0].Value())], v.ID)
-		}
-		if strings.HasPrefix(key, "atc-") {
-			if strings.HasSuffix(strings.ToLower(string(doc.Fields[0].Value())), strings.ToLower(name)) {
-				out[string(doc.Fields[0].Value())] = append(out[string(doc.Fields[0].Value())], v.ID)
-			}
-		}
 	}
 
 	return out, nil
