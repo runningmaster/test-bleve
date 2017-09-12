@@ -47,8 +47,9 @@ func main() {
 func setupHandler(m *http.ServeMux) http.Handler {
 	m.HandleFunc("/test/upload-sugg", uploadSugg)
 	m.HandleFunc("/test/upload-sugg2", uploadSugg2)
-	m.HandleFunc("/test/select-suggestion", selectSuggestion)
 	m.HandleFunc("/test/select-sugg", selectSugg)
+	m.HandleFunc("/test/select-suggestion", selectSuggestion)
+	m.HandleFunc("/test/select-name", selectSuggestion)
 	return m
 }
 
@@ -482,16 +483,15 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		s.Name = strings.TrimSpace(strings.Replace(s.Name, "|", " ", 1))
 		res.SuggATC = append(res.SuggATC, s)
 	}
+	// fucking workaround
+	s1 := sugg{Name: "-"}
 	for i := range sINF {
-		s := sugg{Name: sINF[i]}
-		s.Keys = append(s.Keys, mINF[s.Name]...)
-		s.Keys = sortMagic(idxINF, s.Keys...)
-		if strings.HasPrefix(strings.ToLower(s.Name), strings.ToLower(convName)) {
-			res.SuggINF1 = append(res.SuggINF1, s)
-		} else {
-			res.SuggINF2 = append(res.SuggINF2, s)
-		}
+		s1.Keys = append(s1.Keys, mINF[sINF[i]]...)
 	}
+	// fucking workaround
+	s1.Keys = sortMagic(idxINF, s1.Keys...)
+	res.SuggINF = append(res.SuggINF, s1)
+
 	for i := range sINN {
 		s := sugg{Name: sINN[i]}
 		s.Keys = append(s.Keys, mINN[s.Name]...)
@@ -511,26 +511,6 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		res.SuggORG = append(res.SuggORG, s)
 	}
 
-	/*
-		for i := range res.SuggATC {
-			res.SuggATC[i].Keys = sortMagic(idxATC, res.SuggATC[i].Keys...)
-		}
-		for i := range res.SuggINF1 {
-			res.SuggINF1[i].Keys = sortMagic(idxINF, res.SuggINF1[i].Keys...)
-		}
-		for i := range res.SuggINF2 {
-			res.SuggINF2[i].Keys = sortMagic(idxINF, res.SuggINF2[i].Keys...)
-		}
-		for i := range res.SuggINN {
-			res.SuggINN[i].Keys = sortMagic(idxINN, res.SuggINN[i].Keys...)
-		}
-		for i := range res.SuggACT {
-			res.SuggACT[i].Keys = sortMagic(idxACT, res.SuggACT[i].Keys...)
-		}
-		for i := range res.SuggORG {
-			res.SuggORG[i].Keys = sortMagic(idxORG, res.SuggORG[i].Keys...)
-		}
-	*/
 	b, err = json.MarshalIndent(res, "", "\t")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -756,15 +736,13 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 }
 
 type result struct {
-	Find     string   `json:"find,omitempty"`
-	Sugg     []string `json:"sugg,omitempty"`
-	SuggATC  []sugg   `json:"sugg_atc,omitempty"`
-	SuggINF  []sugg   `json:"sugg_inf,omitempty"`
-	SuggINF1 []sugg   `json:"sugg_inf1,omitempty"`
-	SuggINF2 []sugg   `json:"sugg_inf2,omitempty"`
-	SuggINN  []sugg   `json:"sugg_inn,omitempty"`
-	SuggACT  []sugg   `json:"sugg_act,omitempty"`
-	SuggORG  []sugg   `json:"sugg_org,omitempty"`
+	Find    string   `json:"find,omitempty"`
+	Sugg    []string `json:"sugg,omitempty"`
+	SuggINF []sugg   `json:"sugg_inf,omitempty"`
+	SuggINN []sugg   `json:"sugg_inn,omitempty"`
+	SuggACT []sugg   `json:"sugg_act,omitempty"`
+	SuggORG []sugg   `json:"sugg_org,omitempty"`
+	SuggATC []sugg   `json:"sugg_atc,omitempty"`
 }
 
 type sugg struct {
