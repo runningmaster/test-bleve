@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"unicode"
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/search/query"
@@ -484,7 +485,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		res.SuggATC = append(res.SuggATC, s)
 	}
 	// fucking workaround
-	s1 := sugg{Name: "-"}
+	s1 := sugg{}
 	for i := range sINF {
 		s1.Keys = append(s1.Keys, mINF[sINF[i]]...)
 	}
@@ -755,16 +756,28 @@ func langUA(h http.Header) bool {
 	return strings.Contains(l, "uk") || strings.Contains(l, "ua") // FIXME
 }
 
+func normName(s string) string {
+	res := []rune(s)
+	for i := range res {
+		if !unicode.IsLetter(res[i]) {
+			res[i] = ' '
+		}
+	}
+	return string(res)
+}
+
 func findByName(key, name string) (map[string][]string, error) {
 	idx, err := indexDB.getIndex(key)
 	if err != nil {
 		return nil, err
 	}
 
+	name = normName(name)
+
 	str := strings.Split(strings.ToLower(name), " ")
 	cns := make([]query.Query, len(str))
 	for i, v := range str {
-		q := bleve.NewWildcardQuery("*" + v + "*")
+		q := bleve.NewWildcardQuery("*" + strings.TrimSpace(v) + "*")
 		cns[i] = q
 	}
 
