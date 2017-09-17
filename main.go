@@ -175,6 +175,7 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var lang string
 	for i := range rec {
 		if i == 0 {
 			continue
@@ -192,14 +193,14 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 		docRU.Kind = rec[i][0]
 		docRU.Name = rec[i][2]
 		docRU.Info, _ = strconv.Atoi(rec[i][4])
-		docRU.Sale, _ = strconv.Atoi(rec[i][5])
+		//docRU.Sale, _ = strconv.Atoi(rec[i][5])
 
 		docUA := &baseDoc{}
 		docUA.ID, _ = strconv.Atoi(rec[i][1])
 		docUA.Kind = rec[i][0]
 		docUA.Name = rec[i][3]
 		docUA.Info, _ = strconv.Atoi(rec[i][4])
-		docUA.Sale, _ = strconv.Atoi(rec[i][5])
+		//docUA.Sale, _ = strconv.Atoi(rec[i][5])
 
 		key := rec[i][1]
 		// fucking workaround
@@ -221,37 +222,43 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 			docUA.Kind = "inf"
 		}
 
-		switch docRU.Kind {
-		case "atc":
-			idxATCru.Index(key, docRU.Name)
-			idxATCua.Index(key, docUA.Name)
-
-			vltATCru.Store(key, docRU)
-			vltATCua.Store(key, docUA)
-		case "inf":
-			idxINFru.Index(key, docRU.Name)
-			idxINFua.Index(key, docUA.Name)
-
-			vltINFru.Store(key, docRU)
-			vltINFua.Store(key, docUA)
-		case "inn":
-			idxINNru.Index(key, docRU.Name)
-			idxINNua.Index(key, docUA.Name)
-
-			vltINNru.Store(key, docRU)
-			vltINNua.Store(key, docUA)
-		case "act":
-			idxACTru.Index(key, docRU.Name)
-			idxACTua.Index(key, docUA.Name)
-
-			vltACTru.Store(key, docRU)
-			vltACTua.Store(key, docUA)
-		case "org":
-			idxORGru.Index(key, docRU.Name)
-			idxORGua.Index(key, docUA.Name)
-
-			vltORGru.Store(key, docRU)
-			vltORGua.Store(key, docUA)
+		lang = rec[i][5]
+		if lang == "RU" {
+			switch docRU.Kind {
+			case "atc":
+				idxATCru.Index(key, docRU.Name)
+				vltATCru.Store(key, docRU)
+			case "inf":
+				idxINFru.Index(key, docRU.Name)
+				vltINFru.Store(key, docRU)
+			case "inn":
+				idxINNru.Index(key, docRU.Name)
+				vltINNru.Store(key, docRU)
+			case "act":
+				idxACTru.Index(key, docRU.Name)
+				vltACTru.Store(key, docRU)
+			case "org":
+				idxORGru.Index(key, docRU.Name)
+				vltORGru.Store(key, docRU)
+			}
+		} else {
+			switch docUA.Kind {
+			case "atc":
+				idxATCua.Index(key, docUA.Name)
+				vltATCua.Store(key, docUA)
+			case "inf":
+				idxINFua.Index(key, docUA.Name)
+				vltINFua.Store(key, docUA)
+			case "inn":
+				idxINNua.Index(key, docUA.Name)
+				vltINNua.Store(key, docUA)
+			case "act":
+				idxACTua.Index(key, docUA.Name)
+				vltACTua.Store(key, docUA)
+			case "org":
+				idxORGua.Index(key, docUA.Name)
+				vltORGua.Store(key, docUA)
+			}
 		}
 	}
 
