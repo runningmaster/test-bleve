@@ -484,9 +484,9 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		s.Keys = sortMagic(idxATC, mATC[s.Name]...)
 		// fucking workaround
 		//keys := mATC[s.Name]
-		//for i := range keys {
-		//	keys[i] = strings.Split(keys[i], "|")[0]
-		//}
+		for i := range s.Keys {
+			s.Keys[i] = strings.Split(s.Keys[i], "|")[0]
+		}
 		//s.Keys = append(s.Keys, keys...)
 		//s.Keys = sortMagic(idxATC, s.Keys...)
 		//
