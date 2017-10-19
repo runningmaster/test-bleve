@@ -43,6 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	log.Println("Bye!")
 }
 
 func setupHandler(m *http.ServeMux) http.Handler {
@@ -70,7 +71,11 @@ func startServer(a string, h http.Handler) error {
 
 	go listenForShutdown(s, ch)
 
-	return s.ListenAndServe()
+	err = s.ListenAndServe()
+	if err != nil && err == http.ErrServerClosed {
+		return nil
+	}
+	return err
 }
 
 func listenForShutdown(s *http.Server, ch <-chan os.Signal) {
@@ -94,6 +99,11 @@ type baseDoc struct {
 	Sale int    `json:"sale,omitempty"`
 }
 
+func internalServerError(w http.ResponseWriter, err error) {
+	http.Error(w, err.Error(), http.StatusInternalServerError)
+	log.Printf("err: %s", err.Error())
+}
+
 func uploadSugg(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -103,75 +113,75 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
 	rec, err := csv.NewReader(bytes.NewReader(b)).ReadAll()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
 	vltATCru := &sync.Map{}
 	idxATCru, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltINFru := &sync.Map{}
 	idxINFru, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltINNru := &sync.Map{}
 	idxINNru, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltACTru := &sync.Map{}
 	idxACTru, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltORGru := &sync.Map{}
 	idxORGru, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
 	vltATCua := &sync.Map{}
 	idxATCua, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltINFua := &sync.Map{}
 	idxINFua, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltINNua := &sync.Map{}
 	idxINNua, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltACTua := &sync.Map{}
 	idxACTua, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 	vltORGua := &sync.Map{}
 	idxORGua, err := bleve.NewMemOnly(bleve.NewIndexMapping())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -184,7 +194,7 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid csv: got %d, want %d", len(rec[i]), 6)
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 
@@ -299,13 +309,13 @@ func uploadSugg2(w http.ResponseWriter, r *http.Request) {
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
 	rec, err := csv.NewReader(bytes.NewReader(b)).ReadAll()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -317,7 +327,7 @@ func uploadSugg2(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid csv: got %d, want %d", len(rec[i]), 2)
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 
@@ -341,7 +351,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -351,7 +361,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &v)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -362,7 +372,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		err = fmt.Errorf("too many characters: %d", n)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -379,29 +389,29 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		idxORG = "org-ua"
 	}
 
-	mATC, err := findByName(idxATC, v.Name)
+	mATC, err := findByName(idxATC, v.Name, false)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mINF, err := findByName(idxINF, v.Name)
+	mINF, err := findByName(idxINF, v.Name, false)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mINN, err := findByName(idxINN, v.Name)
+	mINN, err := findByName(idxINN, v.Name, false)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mACT, err := findByName(idxACT, v.Name)
+	mACT, err := findByName(idxACT, v.Name, false)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mORG, err := findByName(idxORG, v.Name)
+	mORG, err := findByName(idxORG, v.Name, false)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -410,37 +420,37 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		convName = convString(v.Name, "en", "uk")
 	}
 	if len(mATC) == 0 {
-		mATC, err = findByName(idxATC, convName)
+		mATC, err = findByName(idxATC, convName, false)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mINF) == 0 {
-		mINF, err = findByName(idxINF, convName)
+		mINF, err = findByName(idxINF, convName, false)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mINN) == 0 {
-		mINN, err = findByName(idxINN, convName)
+		mINN, err = findByName(idxINN, convName, false)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mACT) == 0 {
-		mACT, err = findByName(idxACT, convName)
+		mACT, err = findByName(idxACT, convName, false)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mORG) == 0 {
-		mORG, err = findByName(idxORG, convName)
+		mORG, err = findByName(idxORG, convName, false)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
@@ -523,7 +533,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 
 	b, err = json.MarshalIndent(res, "", "\t")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -590,7 +600,7 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -600,7 +610,7 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &v)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -611,7 +621,7 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 		err = fmt.Errorf("too many characters: %d", n)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -628,29 +638,29 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 		idxORG = "org-ua"
 	}
 
-	mATC, err := findByName(idxATC, v.Name)
+	mATC, err := findByName(idxATC, v.Name, true)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mINF, err := findByName(idxINF, v.Name)
+	mINF, err := findByName(idxINF, v.Name, true)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mINN, err := findByName(idxINN, v.Name)
+	mINN, err := findByName(idxINN, v.Name, true)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mACT, err := findByName(idxACT, v.Name)
+	mACT, err := findByName(idxACT, v.Name, true)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
-	mORG, err := findByName(idxORG, v.Name)
+	mORG, err := findByName(idxORG, v.Name, true)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -659,37 +669,37 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 		convName = convString(v.Name, "en", "uk")
 	}
 	if len(mATC) == 0 {
-		mATC, err = findByName(idxATC, convName)
+		mATC, err = findByName(idxATC, convName, true)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mINF) == 0 {
-		mINF, err = findByName(idxINF, convName)
+		mINF, err = findByName(idxINF, convName, true)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mINN) == 0 {
-		mINN, err = findByName(idxINN, convName)
+		mINN, err = findByName(idxINN, convName, true)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mACT) == 0 {
-		mACT, err = findByName(idxACT, convName)
+		mACT, err = findByName(idxACT, convName, true)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
 	if len(mORG) == 0 {
-		mORG, err = findByName(idxORG, convName)
+		mORG, err = findByName(idxORG, convName, true)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalServerError(w, err)
 			return
 		}
 	}
@@ -736,7 +746,7 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 
 	b, err = json.MarshalIndent(res, "", "\t")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalServerError(w, err)
 		return
 	}
 
@@ -775,7 +785,7 @@ func normName(s string) string {
 	return string(res)
 }
 
-func findByName(key, name string) (map[string][]string, error) {
+func findByName(key, name string, conj bool) (map[string][]string, error) {
 	idx, err := indexDB.getIndex(key)
 	if err != nil {
 		return nil, err
@@ -783,14 +793,19 @@ func findByName(key, name string) (map[string][]string, error) {
 
 	name = normName(name)
 
-	str := strings.Split(strings.ToLower(name), " ")
-	cns := make([]query.Query, len(str))
-	for i, v := range str {
-		q := bleve.NewWildcardQuery("*" + strings.TrimSpace(v) + "*")
-		cns[i] = q
+	var qry query.Query
+	if conj {
+		str := strings.Split(strings.ToLower(name), " ")
+		cns := make([]query.Query, len(str))
+		for i, v := range str {
+			q := bleve.NewWildcardQuery("*" + strings.TrimSpace(v) + "*")
+			cns[i] = q
+		}
+		qry = bleve.NewConjunctionQuery(cns...)
+	} else {
+		qry = bleve.NewMatchPhraseQuery(strings.TrimSpace(name))
 	}
 
-	qry := bleve.NewConjunctionQuery(cns...)
 	req := bleve.NewSearchRequest(qry)
 	req.Size = 1000
 
@@ -823,14 +838,14 @@ func (i *index) getIndex(key string) (bleve.Index, error) {
 	defer i.RUnlock()
 
 	if i.store == nil {
-		return nil, fmt.Errorf("index store is nil")
+		return nil, fmt.Errorf("index store is nil (%s)", key)
 	}
 
 	if idx, ok := i.store[key]; ok {
 		return idx, nil
 	}
 
-	return nil, fmt.Errorf("index not found")
+	return nil, fmt.Errorf("index not found (%s)", key)
 }
 
 func (i *index) getVault(key string) (*sync.Map, error) {
@@ -838,14 +853,14 @@ func (i *index) getVault(key string) (*sync.Map, error) {
 	defer i.RUnlock()
 
 	if i.vault == nil {
-		return nil, fmt.Errorf("index vault is nil")
+		return nil, fmt.Errorf("index vault is nil (%s)", key)
 	}
 
 	if vlt, ok := i.vault[key]; ok {
 		return vlt, nil
 	}
 
-	return nil, fmt.Errorf("vault not found")
+	return nil, fmt.Errorf("vault not found (%s)", key)
 }
 
 func (i *index) setIndex(key string, idx bleve.Index) error {
@@ -853,7 +868,7 @@ func (i *index) setIndex(key string, idx bleve.Index) error {
 	defer i.Unlock()
 
 	if i.store == nil {
-		return fmt.Errorf("index store is nil")
+		return fmt.Errorf("index store is nil (%s)", key)
 	}
 
 	if _, ok := i.store[key]; ok {
@@ -870,7 +885,7 @@ func (i *index) setVault(key string, vlt *sync.Map) error {
 	defer i.Unlock()
 
 	if i.vault == nil {
-		return fmt.Errorf("index vault is nil")
+		return fmt.Errorf("index vault is nil (%s)", key)
 	}
 
 	if _, ok := i.vault[key]; ok {
