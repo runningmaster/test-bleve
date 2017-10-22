@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"encoding/csv"
 	"encoding/json"
 	"flag"
@@ -36,6 +37,7 @@ var indexDB = &index{
 }
 
 func main() {
+	log.SetFlags(0)
 	addr := flag.String("addr", "http://localhost:8080", "uri")
 	flag.Parse()
 
@@ -44,6 +46,7 @@ func main() {
 		log.Fatalln(err)
 	}
 	log.Println("Bye!")
+
 }
 
 func setupHandler(m *http.ServeMux) http.Handler {
@@ -93,7 +96,6 @@ func listenForShutdown(s *http.Server, ch <-chan os.Signal) {
 type baseDoc struct {
 	ID   int    `json:"id,omitempty"`
 	Kind string `json:"kind,omitempty"`
-	Code string `json:"code,omitempty"`
 	Name string `json:"name,omitempty"`
 	Info int    `json:"info,omitempty"`
 	Sale int    `json:"sale,omitempty"`
@@ -102,6 +104,10 @@ type baseDoc struct {
 func internalServerError(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 	log.Printf("err: %s", err.Error())
+}
+
+func strTo8SHA1(s string) string {
+	return fmt.Sprintf("%x", sha1.Sum([]byte(s)))[:8]
 }
 
 func uploadSugg(w http.ResponseWriter, r *http.Request) {
@@ -203,27 +209,12 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 		docRU.Kind = rec[i][0]
 		docRU.Name = rec[i][2]
 		docRU.Info, _ = strconv.Atoi(rec[i][4])
-		//docRU.Sale, _ = strconv.Atoi(rec[i][5])
 
 		docUA := &baseDoc{}
 		docUA.ID, _ = strconv.Atoi(rec[i][1])
 		docUA.Kind = rec[i][0]
 		docUA.Name = rec[i][3]
 		docUA.Info, _ = strconv.Atoi(rec[i][4])
-		//docUA.Sale, _ = strconv.Atoi(rec[i][5])
-
-		key := rec[i][1]
-		// fucking workaround
-		if docRU.Kind == "atc" {
-			docRU.Code = strings.TrimSpace(strings.Split(docRU.Name, "|")[0])
-			//docRU.Name = strings.TrimSpace(strings.Replace(docRU.Name, "|", " ", 1))
-			key = key + "|" + strings.Replace(docRU.Code, " ", "", -1)
-		}
-		if docUA.Kind == "atc" {
-			docUA.Code = strings.TrimSpace(strings.Split(docUA.Name, "|")[0])
-			//docUA.Name = strings.TrimSpace(strings.Replace(docUA.Name, "|", " ", 1))
-			key = key + "|" + strings.Replace(docUA.Code, " ", "", -1)
-		}
 
 		if docRU.Kind == "info" {
 			docRU.Kind = "inf"
@@ -232,42 +223,46 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 			docUA.Kind = "inf"
 		}
 
+		key1 := rec[i][1] // fucking workaround
+		key2 := key1      // fucking workaround
 		lang = rec[i][5]
 		if lang == "RU" {
+			key1 = key1 + "|" + strTo8SHA1(docRU.Name)
 			switch docRU.Kind {
 			case "atc":
-				idxATCru.Index(key, docRU.Name)
-				vltATCru.Store(key, docRU)
+				idxATCru.Index(key1, docRU.Name)
+				vltATCru.Store(key2, docRU)
 			case "inf":
-				idxINFru.Index(key, docRU.Name)
-				vltINFru.Store(key, docRU)
+				idxINFru.Index(key1, docRU.Name)
+				vltINFru.Store(key2, docRU)
 			case "inn":
-				idxINNru.Index(key, docRU.Name)
-				vltINNru.Store(key, docRU)
+				idxINNru.Index(key1, docRU.Name)
+				vltINNru.Store(key2, docRU)
 			case "act":
-				idxACTru.Index(key, docRU.Name)
-				vltACTru.Store(key, docRU)
+				idxACTru.Index(key1, docRU.Name)
+				vltACTru.Store(key2, docRU)
 			case "org":
-				idxORGru.Index(key, docRU.Name)
-				vltORGru.Store(key, docRU)
+				idxORGru.Index(key1, docRU.Name)
+				vltORGru.Store(key2, docRU)
 			}
 		} else {
+			key1 = key1 + "|" + strTo8SHA1(docUA.Name)
 			switch docUA.Kind {
 			case "atc":
-				idxATCua.Index(key, docUA.Name)
-				vltATCua.Store(key, docUA)
+				idxATCua.Index(key1, docUA.Name)
+				vltATCua.Store(key2, docUA)
 			case "inf":
-				idxINFua.Index(key, docUA.Name)
-				vltINFua.Store(key, docUA)
+				idxINFua.Index(key1, docUA.Name)
+				vltINFua.Store(key2, docUA)
 			case "inn":
-				idxINNua.Index(key, docUA.Name)
-				vltINNua.Store(key, docUA)
+				idxINNua.Index(key1, docUA.Name)
+				vltINNua.Store(key2, docUA)
 			case "act":
-				idxACTua.Index(key, docUA.Name)
-				vltACTua.Store(key, docUA)
+				idxACTua.Index(key1, docUA.Name)
+				vltACTua.Store(key2, docUA)
 			case "org":
-				idxORGua.Index(key, docUA.Name)
-				vltORGua.Store(key, docUA)
+				idxORGua.Index(key1, docUA.Name)
+				vltORGua.Store(key2, docUA)
 			}
 		}
 	}
@@ -368,7 +363,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	n := len([]rune(v.Name))
 	if n <= 2 {
 		err = fmt.Errorf("too few characters: %d", n)
-	} else if n > 128 {
+	} else if n > 1024 {
 		err = fmt.Errorf("too many characters: %d", n)
 	}
 	if err != nil {
@@ -491,15 +486,8 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	res := result{Find: v.Name}
 	for i := range sATC {
 		s := sugg{Name: sATC[i]}
-		s.Keys = sortMagic(idxATC, mATC[s.Name]...)
-		// fucking workaround
-		//keys := mATC[s.Name]
-		for i := range s.Keys {
-			s.Keys[i] = strings.Split(s.Keys[i], "|")[0]
-		}
-		//s.Keys = append(s.Keys, keys...)
-		//s.Keys = sortMagic(idxATC, s.Keys...)
-		//
+		s.Keys = append(s.Keys, mATC[s.Name]...)
+		s.Keys = sortMagic(idxATC, s.Keys...)
 		s.Name = strings.TrimSpace(strings.Replace(s.Name, "|", " ", 1))
 		res.SuggATC = append(res.SuggATC, s)
 	}
@@ -508,7 +496,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	for i := range sINF {
 		s1.Keys = append(s1.Keys, mINF[sINF[i]]...)
 	}
-	// fucking workaround
+	s1.Keys = remDupl(s1.Keys)
 	s1.Keys = sortMagic(idxINF, s1.Keys...)
 	res.SuggINF = append(res.SuggINF, s1)
 
@@ -542,6 +530,17 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, string(b))
 }
 
+func remDupl(a []string) []string {
+	res := make([]string, 0, len(a))
+	seen := map[string]struct{}{}
+	for _, v := range a {
+		if _, ok := seen[v]; !ok {
+			res = append(res, v)
+			seen[v] = struct{}{}
+		}
+	}
+	return res
+}
 func sortMagic(key string, keys ...string) []string {
 	if len(keys) < 2 {
 		return keys
@@ -821,6 +820,13 @@ func findByName(key, name string, conj bool) (map[string][]string, error) {
 			return nil, err
 		}
 		out[string(doc.Fields[0].Value())] = append(out[string(doc.Fields[0].Value())], v.ID)
+	}
+
+	for k, v := range out {
+		for i := range v {
+			v[i] = strings.Split(v[i], "|")[0]
+		}
+		out[k] = remDupl(v)
 	}
 
 	return out, nil
