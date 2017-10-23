@@ -101,8 +101,12 @@ type baseDoc struct {
 	Sale int    `json:"sale,omitempty"`
 }
 
-func internalServerError(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+func internalServerError(w http.ResponseWriter, err error, v ...int) {
+	code := http.StatusInternalServerError
+	if len(v) > 0 {
+		code = v[0]
+	}
+	http.Error(w, err.Error(), code)
 	log.Printf("err: %s", err.Error())
 }
 
@@ -112,14 +116,14 @@ func strTo8SHA1(s string) string {
 
 func uploadSugg(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		internalServerError(w, fmt.Errorf("%s", http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed))
 		return
 	}
 
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -200,7 +204,7 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid csv: got %d, want %d", len(rec[i]), 6)
 		}
 		if err != nil {
-			internalServerError(w, err)
+			internalServerError(w, err, http.StatusBadRequest)
 			return
 		}
 
@@ -297,14 +301,14 @@ func uploadSugg(w http.ResponseWriter, r *http.Request) {
 
 func uploadSugg2(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		internalServerError(w, fmt.Errorf("%s", http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed))
 		return
 	}
 
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -322,7 +326,7 @@ func uploadSugg2(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid csv: got %d, want %d", len(rec[i]), 2)
 		}
 		if err != nil {
-			internalServerError(w, err)
+			internalServerError(w, err, http.StatusBadRequest)
 			return
 		}
 
@@ -339,14 +343,14 @@ func uploadSugg2(w http.ResponseWriter, r *http.Request) {
 
 func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		internalServerError(w, fmt.Errorf("%s", http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed))
 		return
 	}
 
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -356,7 +360,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &v)
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -367,7 +371,7 @@ func selectSuggestion(w http.ResponseWriter, r *http.Request) {
 		err = fmt.Errorf("too many characters: %d", n)
 	}
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -592,14 +596,14 @@ func sortMagic(key string, keys ...string) []string {
 
 func selectSugg(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		internalServerError(w, fmt.Errorf("%s", http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed))
 		return
 	}
 
 	b, err := ioutil.ReadAll(r.Body)
 	defer func() { _ = r.Body.Close() }()
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -609,7 +613,7 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(b, &v)
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -620,7 +624,7 @@ func selectSugg(w http.ResponseWriter, r *http.Request) {
 		err = fmt.Errorf("too many characters: %d", n)
 	}
 	if err != nil {
-		internalServerError(w, err)
+		internalServerError(w, err, http.StatusBadRequest)
 		return
 	}
 
